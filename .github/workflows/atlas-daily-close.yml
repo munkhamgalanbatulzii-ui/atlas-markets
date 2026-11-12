@@ -1,48 +1,39 @@
-name: ATLAS - Daily MSE Close 17:00
-
+name: ATLAS - Daily market close at 17:00
 on:
   schedule:
+    # 09:00 UTC = 17:00 Asia/Ulaanbaatar
     - cron: '0 9 * * *'
   workflow_dispatch:
   push:
     paths:
       - '.github/workflows/atlas-daily-close.yml'
-      - 'scripts/update_mse_closes.py'
-
 permissions:
   contents: write
-
 concurrency:
   group: atlas-daily-prices
   cancel-in-progress: false
-
 jobs:
   update-prices:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Install browser for MSE daily report
-        run: |
-          pip install "playwright>=1.45,<2"
-          python -m playwright install --with-deps chromium
-      - name: Read official close and update valuations
-        env:
-          ATLAS_PRICE_FEED_URL: ${{ secrets.ATLAS_PRICE_FEED_URL }}
-          ATLAS_PRICE_FEED_TOKEN: ${{ secrets.ATLAS_PRICE_FEED_TOKEN }}
-        run: python scripts/update_mse_closes.py
-      - name: Publish verified updates only
+      - name: Install parser dependencies
+        run: pip install -q requests beautifulsoup4
+      - name: Import recent, dated brokerage OHLCV rows
+        run: python scripts/import_daily_history.py
+      - name: Publish verified daily changes to site
         run: |
           if git diff --quiet -- index.html; then
-            echo "No new verified closes, index.html unchanged."
+            echo "No new verified quotes in the daily market archive."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
-          git commit -m "data: update verified MSE closing prices"
+          git commit -m "data: update daily archived closing prices"
           git pull --rebase origin main
           git push
