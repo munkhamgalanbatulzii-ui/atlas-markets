@@ -109,6 +109,8 @@ def fetch_mse_report():
             try: page.locator('table tbody tr').first.wait_for(timeout=25000)
             except Exception:pass
             page.wait_for_timeout(2500)
+            print('MSE_DATE_INPUT_HTML',page.evaluate("""() => [...document.querySelectorAll('input')].map(e=>e.parentElement?.outerHTML.slice(0,1100))"""),file=sys.stderr)
+            print('MSE_TABLE_ROW_SAMPLE',page.evaluate("""() => [...document.querySelectorAll('table')].slice(0,8).map(t=>({n:t.querySelectorAll('tbody tr').length,first:t.querySelector('tbody tr')?.innerText.slice(0,350)}))"""),file=sys.stderr)
             report_day=extract_report_date(page)
             tables=page.evaluate("""() => [...document.querySelectorAll('table')].map(t=>({
                 headers:[...t.querySelectorAll('thead th')].map(x=>x.innerText.trim()),
