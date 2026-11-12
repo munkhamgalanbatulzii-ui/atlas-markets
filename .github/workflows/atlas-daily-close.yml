@@ -25,6 +25,8 @@ jobs:
         run: pip install -q requests beautifulsoup4
       - name: Import recent, dated brokerage OHLCV rows
         run: python scripts/import_daily_history.py
+      - name: Update website price date labels
+        run: python scripts/sync_static_labels.py
       - name: Publish verified daily changes to site
         run: |
           if git diff --quiet -- index.html; then
