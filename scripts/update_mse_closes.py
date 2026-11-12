@@ -93,6 +93,9 @@ def extract_report_date(page):
     for v in re.findall(r'\b20\d\d[./-](?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|[12]\d|3[01])\b',meta['text']):
         d=recent(v)
         if d:return d
+    print('MSE_DATE_DIAGNOSTIC',json.dumps(meta,ensure_ascii=False)[:3500],file=sys.stderr)
+    print('MSE_INPUTS',page.evaluate("""() => [...document.querySelectorAll('input,button,select')].slice(0,50).map(e=>({tag:e.tagName,placeholder:e.placeholder,value:e.value,text:(e.innerText||'').slice(0,80)}))"""),file=sys.stderr)
+    print('MSE_TABLE_HEADERS',page.evaluate("""() => [...document.querySelectorAll('table')].slice(0,5).map(t=>[...t.querySelectorAll('thead th')].map(h=>h.innerText))"""),file=sys.stderr)
     raise RuntimeError('Could not verify the official trading DATE; no changes made')
 
 def fetch_mse_report():
