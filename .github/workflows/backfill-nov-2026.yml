@@ -1,0 +1,34 @@
+name: ATLAS - Backfill Nov 11 and 12
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/backfill-nov-2026.yml'
+permissions:
+  contents: write
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -q requests beautifulsoup4
+      - name: Import dated market OHLCV
+        env:
+          ATLAS_BACKFILL_DATES: '2026-11-06,2026-11-09,2026-11-11,2026-11-12'
+        run: python scripts/import_daily_history.py
+      - name: Publish verified rows
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No verified new quotes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "data: import verified November 11 and 12 OHLCV"
+          git pull --rebase origin main
+          git push
