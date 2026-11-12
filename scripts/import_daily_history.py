@@ -19,8 +19,9 @@ from bs4 import BeautifulSoup
 ROOT=Path(__file__).resolve().parents[1]
 INDEX=ROOT/'index.html'
 PATTERN=re.compile(r'(<script\s+type=["\x27]application/json["\x27]\s+id=["\x27]dataset["\x27]>)(.*?)(</script>)',re.S|re.I)
-DATES=set(os.getenv('ATLAS_BACKFILL_DATES','2026-11-06,2026-11-09,2026-11-11,2026-11-12').split(','))
 TODAY=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).date()
+REQUESTED=os.getenv('ATLAS_BACKFILL_DATES','').strip()
+DATES=set(REQUESTED.split(',')) if REQUESTED else {(TODAY-dt.timedelta(days=n)).isoformat() for n in range(10)}
 
 def number(text):
     value=re.sub(r'[,\s\u00a0₮]','',text.strip())
@@ -65,10 +66,11 @@ def main():
     print('RECEIVED',json.dumps({s:sorted(rs) for s,rs in prices.items()},ensure_ascii=False),flush=True)
     # Verify representative values against the publicly dated 2026-11-11 archive.
     expected={'KHAN':2006.0,'GLMT':1274.0,'XAC':1426.0,'MNDL':85.0}
-    for ticker,price in expected.items():
-        row=prices.get(ticker,{}).get('2026-11-11')
-        if row is None or abs(row[4]-price)>0.00001:
-            raise RuntimeError('Cross-check failed '+ticker+' expected '+str(price)+' got '+str(row))
+    if '2026-11-11' in DATES:
+        for ticker,price in expected.items():
+            row=prices.get(ticker,{}).get('2026-11-11')
+            if row is None or abs(row[4]-price)>0.00001:
+                raise RuntimeError('Cross-check failed '+ticker+' expected '+str(price)+' got '+str(row))
     additions=[]
     for c in companies:
         ticker=c['symbol']; history=c.get('priceHistory') or []
@@ -109,7 +111,8 @@ def main():
     d['lastPriceSource']='https://stock.bbe.mn/Home/Stock/{ticker}'
     d['lastPriceRefreshAt']=dt.datetime.now(dt.timezone(dt.timedelta(hours=8))).isoformat(timespec='seconds')
     d['updatedFrom']='Санхүү: Excel; ханшийн сүүлийн түүх: stock.bbe.mn'
-    d['notes'].append('2026-11-12: 2026.11.06, 09, 11, 12 өдрүүдийн боломжтой OHLCV-г stock.bbe.mn брокерийн бүртгэлээр баталгаажуулж нэмж оруулав; МХБ-ийн өдрийн арилжааны мэдээгээр 11-ний арилжааг баталгаажуулав.')
+    d['notes']=[n for n in d.get('notes',[]) if not n.startswith('Ханшийн авто шинэчлэлт:')]
+    d['notes'].append('Ханшийн авто шинэчлэлт: '+d['lastPriceAsOf']+' хүртэлх арилжааны боломжтой OHLCV-г stock.bbe.mn брокерийн ханшийн бүртгэлээс авсан.')
     encoded=json.dumps(data,ensure_ascii=False,separators=(',',':')).replace('</','<\\/')
     result=html[:match.start(2)]+encoded+html[match.end(2):]
     tmp=INDEX.with_suffix('.tmp')
