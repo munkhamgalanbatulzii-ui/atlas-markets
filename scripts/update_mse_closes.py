@@ -106,9 +106,21 @@ def fetch_mse_report():
             page=browser.new_page(locale='mn-MN',timezone_id='Asia/Ulaanbaatar')
             page.goto(SOURCE,wait_until='domcontentloaded',timeout=60000)
             page.get_by_text('Өдрийн арилжааны тайлан',exact=False).first.wait_for(timeout=25000)
-            try: page.locator('table tbody tr').first.wait_for(timeout=25000)
-            except Exception:pass
-            page.wait_for_timeout(2500)
+            # The daily report is empty until a date is explicitly selected.
+            requested_day=dt.datetime.now(TZ).date().isoformat()
+            picker=page.locator('input[type="date"]').first
+            picker.wait_for(timeout=15000)
+            picker.fill(requested_day)
+            if picker.input_value()!=requested_day:
+                raise RuntimeError('The report date filter did not accept the requested day')
+            try:
+                page.wait_for_function("""() => [...document.querySelectorAll('table')].some(t=>{
+                    const h=[...t.querySelectorAll('thead th')].map(x=>x.innerText.trim());
+                    return h.includes('Хаалт') && [...t.querySelectorAll('tbody tr')].some(tr=>tr.querySelector('td')?.innerText.trim().length>1);
+                })""",timeout=30000)
+            except Exception:
+                raise RuntimeError('No populated closing-price rows found for '+requested_day)
+            page.wait_for_timeout(800)
             print('MSE_DATE_INPUT_HTML',page.evaluate("""() => [...document.querySelectorAll('input')].map(e=>e.parentElement?.outerHTML.slice(0,1100))"""),file=sys.stderr)
             print('MSE_TABLE_ROW_SAMPLE',page.evaluate("""() => [...document.querySelectorAll('table')].slice(0,8).map(t=>({n:t.querySelectorAll('tbody tr').length,first:t.querySelector('tbody tr')?.innerText.slice(0,350)}))"""),file=sys.stderr)
             report_day=extract_report_date(page)
