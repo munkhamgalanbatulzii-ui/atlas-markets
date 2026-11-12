@@ -1,0 +1,44 @@
+name: ATLAS - Daily MSE Close 17:00
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: atlas-daily-prices
+  cancel-in-progress: false
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install browser for MSE daily report
+        run: |
+          pip install "playwright>=1.45,<2"
+          python -m playwright install --with-deps chromium
+      - name: Read official close and update valuations
+        env:
+          ATLAS_PRICE_FEED_URL: ${{ secrets.ATLAS_PRICE_FEED_URL }}
+          ATLAS_PRICE_FEED_TOKEN: ${{ secrets.ATLAS_PRICE_FEED_TOKEN }}
+        run: python scripts/update_mse_closes.py
+      - name: Publish verified updates only
+        run: |
+          if git diff --quiet -- index.html; then
+            echo "No new verified closes, index.html unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "data: update verified MSE closing prices"
+          git pull --rebase origin main
+          git push
