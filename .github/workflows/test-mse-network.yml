@@ -1,38 +1,49 @@
-name: Network diagnostics - MSE data sources
-
+name: Diagnose official MSE report for Nov 11 & Nov 12
 on:
   push:
-    paths:
-      - '.github/workflows/test-mse-network.yml'
+    paths: ['.github/workflows/test-mse-network.yml']
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
-  test:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
-      - name: Probe public stock market sources
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: |
+          pip -q install playwright
+          python -m playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Inspect daily tables and captured API requests
         run: |
           python - <<'PY'
-          import urllib.request,concurrent.futures
-          urls=[
-            'https://new.mse.mn/trade-daily-report',
-            'https://www.mse.mn/',
-            'https://www.mse.mn/trade-daily-report',
-            'https://mse.mn/trade-daily-report',
-            'https://open.mse.mn/',
-            'https://stock.bbe.mn/Home/Index/',
-          ]
-          def probe(u):
-            try:
-              req=urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'})
-              with urllib.request.urlopen(req,timeout=12) as r:
-                return (u,r.status,r.url,r.headers.get('content-type'),len(r.read(1024)))
-            except Exception as e:
-              return (u,'ERROR',str(e)[:160])
-          with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
-            for row in pool.map(probe,urls):print(row,flush=True)
+          from playwright.sync_api import sync_playwright
+          import json
+          for date in ('2026-11-11','2026-11-12'):
+            print('\n======= TARGET DAY',date,'=======',flush=True)
+            with sync_playwright() as p:
+              browser=p.chromium.launch(headless=True)
+              page=browser.new_page(locale='mn-MN',timezone_id='Asia/Ulaanbaatar')
+              responses=[]
+              failures=[]
+              page.on('response',lambda r:responses.append((r.status,r.url[:250],r.headers.get('content-type',''))) if ('mse.mn' in r.url or '/api/' in r.url) else None)
+              page.on('requestfailed',lambda r:failures.append((r.url[:250],r.failure)))
+              try:
+                page.goto('https://www.mse.mn/trade-daily-report',wait_until='domcontentloaded',timeout=40000)
+                page.locator('input[type=date]').first.fill(date)
+                page.wait_for_timeout(14000)
+                print('FIELD',page.locator('input[type=date]').first.input_value(),flush=True)
+                data=page.evaluate("""() => [...document.querySelectorAll('table')].slice(0,8).map((t,i)=>({
+                   id:i,headers:[...t.querySelectorAll('thead th')].map(e=>e.innerText.trim()),
+                   count:t.querySelectorAll('tbody tr').length,
+                   filled:[...t.querySelectorAll('tbody tr')].filter(tr=>tr.innerText.trim()).slice(0,20).map(tr=>[...tr.querySelectorAll('td')].map(x=>x.innerText.trim()))
+                }))""")
+                print('TABLES',json.dumps(data,ensure_ascii=False)[:13000],flush=True)
+                print('RESPONSES',json.dumps(responses,ensure_ascii=False)[:9000],flush=True)
+                print('FAILURES',json.dumps(failures,ensure_ascii=False)[:4000],flush=True)
+                print('BODY_SAMPLE',page.locator('body').inner_text()[-600:],flush=True)
+              except Exception as e:print('ERROR',repr(e),flush=True)
+              finally:browser.close()
           PY
