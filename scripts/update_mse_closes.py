@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = ROOT / 'index.html'
 DATASET = re.compile(r'(<script\s+type=["\']application/json["\']\s+id=["\']dataset["\']>)(.*?)(</script>)', re.I | re.S)
 TZ = ZoneInfo('Asia/Ulaanbaatar')
-SOURCE = 'https://new.mse.mn/trade-daily-report'
+SOURCE = 'https://www.mse.mn/trade-daily-report'
 ALIASES = {
     'symbol':['симбол','тикер','symbol','ticker'],
     'open':['нээлт','нээлтийн ханш','open'],
@@ -183,10 +183,16 @@ def merge(html,payload):
     summary['lastPriceAsOf']=max(c['metrics'].get('priceDate') or '' for c in companies)
     summary['lastPriceSource']=payload.get('source',SOURCE)
     summary['lastPriceRefreshAt']=dt.datetime.now(TZ).isoformat(timespec='seconds')
+    summary['updatedFrom']='Санхүү: Excel · Ханш: МХБ'
     # The financial statement timestamp remains unchanged.
     encoded=json.dumps(data,ensure_ascii=False,separators=(',',':')).replace('</','<\\/')
     print('Updated:',', '.join(sorted(changed)), 'Trading date:',report_day)
-    return html[:found.start(2)]+encoded+html[found.end(2):]
+    updated=html[:found.start(2)]+encoded+html[found.end(2):]
+    # Replace the static Excel date badge only after verified updates are written.
+    updated=re.sub(r'(<span class="source-chip"><span class="source-dot"></span>)([^<]*)(</span>)',
+                   lambda match:match.group(1)+'МХБ · '+summary['lastPriceAsOf']+match.group(3),
+                   updated,count=1)
+    return updated
 
 def main():
     url=os.getenv('ATLAS_PRICE_FEED_URL','').strip()
