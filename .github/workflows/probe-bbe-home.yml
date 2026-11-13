@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
+      - run: pip install -q requests beautifulsoup4
       - name: Probe home pages and date filters
         run: |
           python - <<'PY'
