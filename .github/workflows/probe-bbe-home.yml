@@ -1,0 +1,36 @@
+name: Diagnose daily BBE home market report
+on:
+  push:
+    paths: [".github/workflows/probe-bbe-home.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe home pages and date filters
+        run: |
+          python - <<'PY'
+          import requests,re,html
+          from bs4 import BeautifulSoup
+          sess=requests.Session()
+          sess.headers.update({'User-Agent':'Mozilla/5.0'})
+          for url in [
+              'https://stock.bbe.mn/Home/Index/',
+              'https://stock.bbe.mn/Home/Index/?date=2026-11-13',
+              'https://stock.bbe.mn/Home/Index/2026-11-13',
+              'https://stock.bbe.mn/Home/Index/?Date=2026-11-13',
+              'https://stock.bbe.mn/Home/Stock/KHAN']:
+            try:
+              r=sess.get(url,timeout=15)
+              s=BeautifulSoup(r.text,'html.parser')
+              txt=s.get_text(' ',strip=True)
+              print('URL',url,'STATUS',r.status_code,'LENGTH',len(r.content),'DATES',re.findall(r'2026[-/.]11[-/.](?:12|13)',txt)[:14],flush=True)
+              print('TITLES',[x.get_text(' ',strip=True)[:110] for x in s.find_all(['h1','h2','h3','h4','h5'])][:10],flush=True)
+              print('FORMS',[(f.get('action'),f.get('method'),[(i.get('name'),i.get('type'),i.get('value')) for i in f.find_all('input')]) for f in s.find_all('form')][:5],flush=True)
+              print('ROW_SAMPLES',[[t.get_text(' ',strip=True)[:170] for t in tb.find_all('tr')[:4]] for tb in s.find_all('table')[:2]],flush=True)
+              print('INPUTS',[(i.get('name'),i.get('type'),i.get('value'),i.get('id')) for i in s.find_all('input')][:20],flush=True)
+            except Exception as e:print('ERROR',url,repr(e),flush=True)
+          PY
